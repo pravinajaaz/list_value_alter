@@ -59,20 +59,23 @@ function list_value_alter_form_submit($form, &$form_state) {
   $orig_value = _list_actual_values($raw_orig_value);
   $updated_value = _list_actual_values($raw_updated_value);
   $raw_diff_map = array_diff($raw_updated_value, $raw_orig_value);
-  $diff_map = array_diff($updated_value, $orig_value);
+  $diff_map = array_diff($orig_value['keys'], $updated_value['keys']);
   dpm($orig_value);
   dpm($updated_value);
   dpm($diff_map);
   if(!empty($diff_map)) {
     foreach ($diff_map as $key => $value) {
-      $key_pos = array_search($key, array_keys($updated_value));
-      dpm($key_pos);
       $entities = db_select('field_data_' . $list_field, 'fd')
         ->fields('fd', array('entity_id', 'entity_type'))
-        ->condition($list_field . '_value', $key, '=')
+        ->condition($list_field . '_value', $value, '=')
         ->execute()
         ->fetchAll();
        dpm($entities);
+       foreach ($entities as $entity) {
+         if($entity->entity_type == "node") {
+
+         }
+       }
       // $node = node_load($nid);
       // $node_wrapper = entity_metadata_wrapper('node', $node);
       // $node_wrapper->field_myfield->set(1);
@@ -85,7 +88,8 @@ function _list_actual_values($list_val) {
   $actual_list = array();
   foreach ($list_val as $key => $value) {
     $lval = explode("|", $value);
-    $actual_list[$lval[0]] = $lval[1];
+    $actual_list['values'][] = $lval[1];
+    $actual_list['keys'][] = $lval[0];
   }
   return $actual_list;
 }
