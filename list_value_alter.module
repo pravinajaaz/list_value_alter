@@ -2,7 +2,7 @@
 
 /**
  * Implements hook_menu().
- */
+ **/
 function list_value_alter_menu(){
   return array(
     'admin/config/development/list-value-alter' => array(
