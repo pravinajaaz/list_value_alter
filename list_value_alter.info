@@ -1,0 +1,4 @@
+name = List value alter
+description = Alters the value of list fields.
+core = 7.x
+package = development

@@ -1,0 +1,137 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function list_value_alter_menu(){
+  return array(
+    'admin/config/development/list-value-alter' => array(
+      'title' => 'Change the list field value',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('list_value_alter_form'),
+      'access arguments' => array('administer contents'),
+    ),
+  );
+}
+
+function list_value_alter_form($form, &$form_state) {
+  $default = !empty($form_state['values']['list_fields']) ? $form_state['values']['list_fields'] : 'field_color';
+  //dpm($default);
+  $form['list_fields'] = array(
+    '#type' => 'select',
+    '#title' => t('List fields(text)'),
+    '#description' => t('Select the list field'),
+    '#default_value' => $default,
+    '#options' => _all_list_fields('fields'),
+    '#ajax' => array(
+      'callback' => '_list_allowed_values',
+      'wrapper' => 'list-values',
+      'method' => 'replace',
+    ),
+  );
+  $header = array('Existing value', 'New value');
+  $options = array('0' => array('test1', 'test2'));
+  $form['mapping'] = array(
+    '#prefix' => '<div id="list-values">',
+    '#suffix' => '</div>',
+    '#theme' => 'list_value_alter_mapping_table',
+    '#tree' => TRUE,
+  );
+  foreach (_all_list_fields('allowed_values')[$default] as $key => $field_name) {
+    $form['mapping'][] = array(
+      '#type' => 'textfield',
+      '#value' => $key . '|' . $field_name,
+      '#extra_data' => array('field_name' => $key . '|' . $field_name)
+    );
+  }
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('save mapping'),
+  );
+  return $form;
+}
+
+function list_value_alter_form_submit($form, &$form_state) {
+  dpm($form_state);
+  $list_field = $form_state['values']['list_fields'];
+  $raw_orig_value = $form_state['values']['mapping'];
+  $raw_updated_value = $form_state['input']['mapping'];
+  $orig_value = _list_actual_values($raw_orig_value);
+  $updated_value = _list_actual_values($raw_updated_value);
+  $raw_diff_map = array_diff($raw_updated_value, $raw_orig_value);
+  $diff_map = array_diff($updated_value, $orig_value);
+  dpm($orig_value);
+  dpm($updated_value);
+  dpm($diff_map);
+  if(!empty($diff_map)) {
+    foreach ($diff_map as $key => $value) {
+      $key_pos = array_search($key, array_keys($updated_value));
+      dpm($key_pos);
+      $entities = db_select('field_data_' . $list_field, 'fd')
+        ->fields('fd', array('entity_id', 'entity_type'))
+        ->condition($list_field . '_value', $key, '=')
+        ->execute()
+        ->fetchAll();
+       dpm($entities);
+      // $node = node_load($nid);
+      // $node_wrapper = entity_metadata_wrapper('node', $node);
+      // $node_wrapper->field_myfield->set(1);
+      // $node_wrapper->save();
+    }
+  }
+}
+
+function _list_actual_values($list_val) {
+  $actual_list = array();
+  foreach ($list_val as $key => $value) {
+    $lval = explode("|", $value);
+    $actual_list[$lval[0]] = $lval[1];
+  }
+  return $actual_list;
+}
+
+function _all_list_fields($property = NULL) {
+  $instances = field_info_instances();
+
+  foreach ($instances as $entity_type => $type_bundles) {
+    foreach ($type_bundles as $bundle => $bundle_instances) {
+      foreach ($bundle_instances as $field_name => $instance) {
+        $field = field_info_field($field_name);
+        if($field['type'] == 'list_text') {
+          $list_fields['fields'][$field_name] = $field_name;
+          $list_fields['bundles'][$field_name] = $field['bundles'];
+          $list_fields['allowed_values'][$field_name] = $field['settings']['allowed_values'];
+        }
+      }
+    }
+  }
+  return $list_fields[$property];
+}
+
+
+function _list_allowed_values($form, $form_state) {
+  return $form['mapping'];
+}
+
+function list_value_alter_theme() {
+  return array(
+    'list_value_alter_mapping_table' => array(
+      'render element' => 'element'
+    )
+  );
+}
+
+function theme_list_value_alter_mapping_table($vars) {
+  $element = $vars['element'];
+  $rows = array();
+  foreach (element_children($element) as $key) {
+    $rows[] = array(
+      array('data' => $element[$key]['#extra_data']['field_name']),
+      array('data' => render($element[$key])),
+      array('data' => l('delete', NULL,  array('fragment' => 'id'))),
+    );
+  }
+  $title = t('<h3>List value mapping</h3>');
+  $header = array(t('Existing value'), t('New value'), t('Opertations'));
+  return $title . theme('table', array('header' => $header, 'rows' => $rows));
+}
