@@ -60,9 +60,6 @@ function list_value_alter_form_submit($form, &$form_state) {
   $updated_value = _list_actual_values($raw_updated_value);
   $raw_diff_map = array_diff($raw_updated_value, $raw_orig_value);
   $diff_map = array_diff($orig_value['keys'], $updated_value['keys']);
-  dpm($orig_value);
-  dpm($updated_value);
-  dpm($diff_map);
   if(!empty($diff_map)) {
     foreach ($diff_map as $key => $value) {
       $entities = db_select('field_data_' . $list_field, 'fd')
@@ -70,16 +67,29 @@ function list_value_alter_form_submit($form, &$form_state) {
         ->condition($list_field . '_value', $value, '=')
         ->execute()
         ->fetchAll();
-       dpm($entities);
-       foreach ($entities as $entity) {
-         if($entity->entity_type == "node") {
+      $new_key = $updated_value['keys'][$key];
+      dpm($updated_value);
+      dpm($value);
+      dpm($new_key);
+      foreach ($entities as $entity) {
+        if($entity->entity_type == "node") {
+          $node = node_load($entity->entity_id);
+          $node_wrapper = entity_metadata_wrapper('node', $node);
+          $node_wrapper->$list_field->set($new_key);
+          $node_wrapper->save();
+        }
+        elseif ($entity->entity_type == "taxonomy_term") {
 
-         }
-       }
-      // $node = node_load($nid);
-      // $node_wrapper = entity_metadata_wrapper('node', $node);
-      // $node_wrapper->field_myfield->set(1);
-      // $node_wrapper->save();
+        }
+      }
+      $info = field_info_field($list_field);
+      // Get a reference to the values
+      $values = &$info['settings']['allowed_values'];
+      // Manipulate the values in some way, e.g.
+      unset($values[$value]);
+      $values[$new_key] = $updated_value['values'][$key];;
+      // Save the field
+      field_update_field($info);
     }
   }
 }
