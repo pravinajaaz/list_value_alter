@@ -15,14 +15,15 @@ function list_value_alter_menu(){
 }
 
 function list_value_alter_form($form, &$form_state) {
-  $default = !empty($form_state['values']['list_fields']) ? $form_state['values']['list_fields'] : 'field_color';
+  $listFields = _all_list_fields('name');
+  $default = !empty($form_state['values']['list_fields']) ? $form_state['values']['list_fields'] : current($listFields);
   //dpm($default);
   $form['list_fields'] = array(
     '#type' => 'select',
     '#title' => t('List fields(text)'),
     '#description' => t('Select the list field'),
     '#default_value' => $default,
-    '#options' => _all_list_fields('fields'),
+    '#options' => $listFields,
     '#ajax' => array(
       'callback' => '_list_allowed_values',
       'wrapper' => 'list-values',
@@ -37,7 +38,8 @@ function list_value_alter_form($form, &$form_state) {
     '#theme' => 'list_value_alter_mapping_table',
     '#tree' => TRUE,
   );
-  foreach (_all_list_fields('allowed_values')[$default] as $key => $field_name) {
+	$allListFields = _all_list_fields('allowed_values');
+  foreach ($allListFields[$default] as $key => $field_name) {
     $form['mapping'][] = array(
       '#type' => 'textfield',
       '#value' => $key . '|' . $field_name,
@@ -103,7 +105,11 @@ function _list_actual_values($list_val) {
 }
 
 function _all_list_fields($property = NULL) {
-  $instances = field_info_instances();
+  $fields = field_info_fields();
+  array_walk($fields, 'list_fields_map', $property);
+  return array_filter($fields);
+  
+  /*$instances = field_info_instances();
 
   foreach ($instances as $entity_type => $type_bundles) {
     foreach ($type_bundles as $bundle => $bundle_instances) {
@@ -117,9 +123,30 @@ function _all_list_fields($property = NULL) {
       }
     }
   }
-  return $list_fields[$property];
+  return $list_fields[$property];*/
 }
 
+function list_fields_map(&$value, &$key, $property){
+  $fieldTypes = array('list_float', 'list_integer', 'list_text');
+  if(in_array($value['type'], $fieldTypes)){
+    switch($property){
+      case 'name':
+        $value = $value['field_name'];
+      break;
+      case 'allowed_values':
+        $value = $value['settings']['allowed_values'];
+      break;
+      case 'bundles':
+        $value = $value['bundles'];
+      break;
+      default:
+        $value = NULL;
+      break;
+    }
+  }else{
+    $value = NULL;
+  }
+}
 
 function _list_allowed_values($form, $form_state) {
   return $form['mapping'];
