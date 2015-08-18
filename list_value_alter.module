@@ -16,20 +16,25 @@ function list_value_alter_menu(){
 
 function list_value_alter_form($form, &$form_state) {
   $listFields = _all_list_fields('name');
-  $default = !empty($form_state['values']['list_fields']) ? $form_state['values']['list_fields'] : current($listFields);
-  //dpm($default);
-  $form['list_fields'] = array(
+  $default = !empty($form_state['values']['field_name']) ? $form_state['values']['field_name'] : current($listFields['fields']);
+  $form['field_name'] = array(
     '#type' => 'select',
     '#title' => t('List fields(text)'),
     '#description' => t('Select the list field'),
     '#default_value' => $default,
-    '#options' => $listFields,
+    '#options' => $listFields['fields'],
     '#ajax' => array(
       'callback' => '_list_allowed_values',
       'wrapper' => 'list-values',
       'method' => 'replace',
     ),
   );
+  foreach ($listFields['type'] as $key => $value) {
+    $form[$key] = array(
+      '#type' => 'hidden',
+      '#value' => $value
+    );
+  }
   $header = array('Existing value', 'New value');
   $options = array('0' => array('test1', 'test2'));
   $form['mapping'] = array(
@@ -48,13 +53,38 @@ function list_value_alter_form($form, &$form_state) {
   }
   $form['submit'] = array(
     '#type' => 'submit',
-    '#value' => t('save mapping'),
+    '#value' => t('Save mapping'),
   );
   return $form;
 }
 
+function list_value_alter_form_validate($form, &$form_state) {
+  $fieldName = $form_state['input']['field_name'];
+  $fieldType = $form_state['input'][$fieldName];
+  $mappings = $form_state['input']['mapping'];
+  $values = array();
+  $count = 0;
+  foreach($mappings as $key => $option){
+    $value = list_extract_allowed_values($option, $fieldType, FALSE);
+    $key = key($value);
+    $element = 'mapping['.$count++.']';
+    if ($fieldType == 'list_integer' && !preg_match('/^-?\d+$/', $key)) {
+      form_set_error($element, t('Allowed values list: keys must be integers.'));
+      break;
+    }
+    if ($fieldType == 'list_float' && !is_numeric($key)) {
+      form_set_error($element, t('Allowed values list: each key must be a valid integer or decimal.'));
+      break;
+    }
+    elseif ($fieldType == 'list_text' && drupal_strlen($key) > 255) {
+      form_set_error($element, t('Allowed values list: each key must be a string at most 255 characters long.'));
+      break;
+    }
+  }
+}
+
 function list_value_alter_form_submit($form, &$form_state) {
-  $list_field = $form_state['values']['list_fields'];
+  $list_field = $form_state['values']['field_name'];
   $raw_orig_value = $form_state['values']['mapping'];
   $raw_updated_value = $form_state['input']['mapping'];
   $orig_value = _list_actual_values($raw_orig_value);
@@ -105,25 +135,13 @@ function _list_actual_values($list_val) {
 }
 
 function _all_list_fields($property = NULL) {
-  $fields = field_info_fields();
+  $fields = $fieldType = field_info_fields();
   array_walk($fields, 'list_fields_map', $property);
-  return array_filter($fields);
-  
-  /*$instances = field_info_instances();
-
-  foreach ($instances as $entity_type => $type_bundles) {
-    foreach ($type_bundles as $bundle => $bundle_instances) {
-      foreach ($bundle_instances as $field_name => $instance) {
-        $field = field_info_field($field_name);
-        if($field['type'] == 'list_text') {
-          $list_fields['fields'][$field_name] = $field_name;
-          $list_fields['bundles'][$field_name] = $field['bundles'];
-          $list_fields['allowed_values'][$field_name] = $field['settings']['allowed_values'];
-        }
-      }
-    }
+  if($property == 'name'){
+    array_walk($fieldType, 'list_fields_map', 'field_type');
+    return array('fields' => array_filter($fields), 'type' => array_filter($fieldType));
   }
-  return $list_fields[$property];*/
+  return array_filter($fields);
 }
 
 function list_fields_map(&$value, &$key, $property){
@@ -138,6 +156,9 @@ function list_fields_map(&$value, &$key, $property){
       break;
       case 'bundles':
         $value = $value['bundles'];
+      break;
+      case 'field_type':
+        $value = $value['type'];
       break;
       default:
         $value = NULL;
